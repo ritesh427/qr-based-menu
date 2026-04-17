@@ -1,0 +1,16 @@
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: backend-api
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/**,/swagger-ui/**,/swagger-ui.html,/v3/api-docs/**
+        - id: backend-websocket
+          uri: ws://localhost:8081
+          predicates:
+            - Path=/ws/**
+        - id: frontend
+          uri: http://localhost:5173
+          predicates:
+            - Path=/**

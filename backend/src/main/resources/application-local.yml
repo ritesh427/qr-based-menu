@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:restaurant_ordering;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+  cache:
+    type: simple
+  kafka:
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+app:
+  public-base-url: ${APP_PUBLIC_BASE_URL:http://192.168.1.9:5173}
+  kafka:
+    enabled: false

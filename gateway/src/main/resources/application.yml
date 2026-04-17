@@ -1,0 +1,27 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ordering-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: backend-api
+          uri: http://backend:8081
+          predicates:
+            - Path=/api/**,/swagger-ui/**,/swagger-ui.html,/v3/api-docs/**
+        - id: backend-websocket
+          uri: ws://backend:8081
+          predicates:
+            - Path=/ws/**
+        - id: frontend
+          uri: http://frontend:5173
+          predicates:
+            - Path=/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

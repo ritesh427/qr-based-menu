@@ -1,0 +1,5 @@
+backend/target/
+gateway/target/
+frontend/node_modules/
+frontend/dist/
+.idea/

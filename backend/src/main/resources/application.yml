@@ -1,0 +1,32 @@
+server:
+  port: 8081
+
+spring:
+  profiles:
+    default: local
+  application:
+    name: ordering-backend
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  public-base-url: http://localhost:5173
+  upload-dir: uploads
+  jwt:
+    secret: 01234567890123456789012345678901
+    expiration-seconds: 86400
+  kafka:
+    enabled: true
