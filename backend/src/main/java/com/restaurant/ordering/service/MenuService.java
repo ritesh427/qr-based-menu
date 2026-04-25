@@ -1,6 +1,7 @@
 package com.restaurant.ordering.service;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,13 +14,17 @@ import com.google.zxing.client.j2se.MatrixToImageWriter;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
 import com.restaurant.ordering.dto.MenuCategoryResponse;
+import com.restaurant.ordering.dto.MenuItemAddonRequest;
 import com.restaurant.ordering.dto.MenuItemRequest;
 import com.restaurant.ordering.dto.MenuItemResponse;
+import com.restaurant.ordering.dto.MenuItemVariantRequest;
 import com.restaurant.ordering.dto.QrCodeResponse;
 import com.restaurant.ordering.dto.QrMenuResponse;
 import com.restaurant.ordering.entity.Category;
 import com.restaurant.ordering.entity.DiningTable;
+import com.restaurant.ordering.entity.MenuItemAddon;
 import com.restaurant.ordering.entity.MenuItem;
+import com.restaurant.ordering.entity.MenuItemVariant;
 import com.restaurant.ordering.exception.ResourceNotFoundException;
 import com.restaurant.ordering.mapper.EntityMapper;
 import com.restaurant.ordering.repository.CategoryRepository;
@@ -120,7 +125,7 @@ public class MenuService {
         MenuItem item = menuItemRepository.findById(id)
                 .filter(value -> value.getCategory().getRestaurant().getId().equals(restaurantId))
                 .orElseThrow(() -> new ResourceNotFoundException("Menu item not found"));
-        item.setAvailable(available);
+        item.setAvailable(available && item.getStockQuantity() > 0);
         return entityMapper.toMenuItemResponse(item);
     }
 
@@ -144,10 +149,33 @@ public class MenuService {
         item.setDescription(request.description());
         item.setPrice(request.price());
         item.setImageUrl(request.imageUrl());
-        item.setAvailable(request.available());
+        item.setStockQuantity(request.stockQuantity());
+        item.setAvailable(request.available() && request.stockQuantity() > 0);
         item.setVegetarian(request.vegetarian());
         item.setEstimatedPreparationTime(request.estimatedPreparationTime());
         item.setCategory(category);
+        item.getVariants().clear();
+        for (MenuItemVariantRequest variantRequest : request.variants() == null ? List.<MenuItemVariantRequest>of() : request.variants()) {
+            MenuItemVariant variant = new MenuItemVariant();
+            variant.setMenuItem(item);
+            variant.setName(variantRequest.name());
+            variant.setPriceAdjustment(variantRequest.priceAdjustment() == null ? BigDecimal.ZERO : variantRequest.priceAdjustment());
+            variant.setStockQuantity(variantRequest.stockQuantity());
+            variant.setAvailable(variantRequest.available() && variantRequest.stockQuantity() > 0);
+            variant.setEstimatedPreparationTime(variantRequest.estimatedPreparationTime());
+            item.getVariants().add(variant);
+        }
+        item.getAddons().clear();
+        for (MenuItemAddonRequest addonRequest : request.addons() == null ? List.<MenuItemAddonRequest>of() : request.addons()) {
+            MenuItemAddon addon = new MenuItemAddon();
+            addon.setMenuItem(item);
+            addon.setName(addonRequest.name());
+            addon.setPrice(addonRequest.price() == null ? BigDecimal.ZERO : addonRequest.price());
+            addon.setStockQuantity(addonRequest.stockQuantity());
+            addon.setAvailable(addonRequest.available() && addonRequest.stockQuantity() > 0);
+            addon.setEstimatedPreparationTime(addonRequest.estimatedPreparationTime());
+            item.getAddons().add(addon);
+        }
     }
 
     private Category findCategory(Long restaurantId, Long categoryId) {

@@ -2,10 +2,18 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const CartContext = createContext(null);
 
+const normalizeCartItem = (item) => ({
+  ...item,
+  cartKey: item.cartKey ?? String(item.id),
+  addonIds: item.addonIds ?? [],
+  addonNames: item.addonNames ?? [],
+  availableQuantity: item.availableQuantity ?? item.stockQuantity ?? 0
+});
+
 export function CartProvider({ children }) {
   const [items, setItems] = useState(() => {
     const saved = localStorage.getItem("restaurantCart");
-    return saved ? JSON.parse(saved) : [];
+    return saved ? JSON.parse(saved).map(normalizeCartItem) : [];
   });
 
   useEffect(() => {
@@ -13,21 +21,34 @@ export function CartProvider({ children }) {
   }, [items]);
 
   const addItem = (item) => {
+    const normalized = normalizeCartItem(item);
     setItems((current) => {
-      const existing = current.find((entry) => entry.id === item.id);
+      const existing = current.find((entry) => entry.cartKey === normalized.cartKey);
       if (existing) {
+        if (existing.quantity >= (existing.availableQuantity ?? 0)) {
+          return current;
+        }
         return current.map((entry) =>
-          entry.id === item.id ? { ...entry, quantity: entry.quantity + 1 } : entry
+          entry.cartKey === normalized.cartKey ? { ...entry, quantity: entry.quantity + 1 } : entry
         );
       }
-      return [...current, { ...item, quantity: 1 }];
+      if ((normalized.availableQuantity ?? 0) <= 0) {
+        return current;
+      }
+      return [...current, { ...normalized, quantity: 1 }];
     });
   };
 
-  const updateQuantity = (id, quantity) => {
+  const updateQuantity = (cartKey, quantity) => {
     setItems((current) =>
       current
-        .map((entry) => (entry.id === id ? { ...entry, quantity } : entry))
+        .map((entry) => {
+          if (entry.cartKey !== cartKey) {
+            return entry;
+          }
+          const max = entry.availableQuantity ?? quantity;
+          return { ...entry, quantity: Math.min(quantity, max) };
+        })
         .filter((entry) => entry.quantity > 0)
     );
   };

@@ -45,9 +45,14 @@ export default function OrderStatusPage() {
             <p className="text-xs uppercase tracking-[0.3em] text-paprika-500">Live Table Updates</p>
             <h1 className="font-display text-3xl text-sand-900">Order Status</h1>
           </div>
-          <Link to={`/menu/${qrToken}`} className="text-sm font-semibold text-paprika-700">
-            Order More
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link to={`/bill/${qrToken}`} className="text-sm font-semibold text-sand-900">
+              Final Bill
+            </Link>
+            <Link to={`/menu/${qrToken}`} className="text-sm font-semibold text-paprika-700">
+              Order More
+            </Link>
+          </div>
         </div>
         <div className="space-y-4">
           {orders.map((order) => (
@@ -56,13 +61,25 @@ export default function OrderStatusPage() {
                 <div>
                   <p className="text-sm text-sand-600">Order #{order.id}</p>
                   <p className="font-semibold text-sand-900">Table {order.tableNumber}</p>
+                  <p className="text-sm text-sand-600">ETA: {order.estimatedReadyInMinutes || 10} min</p>
+                  <p className="text-sm text-sand-600">
+                    {order.paymentMethod?.replaceAll("_", " ")} • {order.paymentStatus}
+                  </p>
+                  {order.paymentReference && (
+                    <p className="text-sm text-sand-600">Ref: {order.paymentReference}</p>
+                  )}
                 </div>
                 <OrderStatusBadge status={order.status} />
               </div>
               <div className="mt-4 space-y-2 text-sm text-sand-700">
                 {order.items.map((item) => (
-                  <div key={`${order.id}-${item.menuItemId}`} className="flex justify-between">
-                    <span>{item.itemName} x {item.quantity}</span>
+                  <div key={`${order.id}-${item.menuItemId}-${item.variantName || "base"}-${item.addonNames || "none"}`} className="flex justify-between gap-4">
+                    <span>
+                      {item.itemName}
+                      {item.variantName ? ` (${item.variantName})` : ""}
+                      {item.addonNames ? ` + ${item.addonNames}` : ""}
+                      {" "}x {item.quantity}
+                    </span>
                     <span>Rs. {item.lineTotal}</span>
                   </div>
                 ))}

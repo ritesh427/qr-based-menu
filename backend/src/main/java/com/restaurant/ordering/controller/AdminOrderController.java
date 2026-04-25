@@ -2,6 +2,8 @@ package com.restaurant.ordering.controller;
 
 import java.util.List;
 
+import com.restaurant.ordering.dto.FinalBillResponse;
+import com.restaurant.ordering.dto.OrderPaymentUpdateRequest;
 import com.restaurant.ordering.dto.OrderResponse;
 import com.restaurant.ordering.dto.OrderStatsResponse;
 import com.restaurant.ordering.dto.OrderStatusUpdateRequest;
@@ -40,5 +42,17 @@ public class AdminOrderController {
                                       @PathVariable Long id,
                                       @Valid @RequestBody OrderStatusUpdateRequest request) {
         return orderService.updateStatus(restaurantId, id, request.status());
+    }
+
+    @PatchMapping("/{id}/payment")
+    public OrderResponse updatePayment(@RequestHeader("X-Restaurant-Id") Long restaurantId,
+                                       @PathVariable Long id,
+                                       @Valid @RequestBody OrderPaymentUpdateRequest request) {
+        return orderService.updatePayment(restaurantId, id, request);
+    }
+
+    @GetMapping("/bill/{qrToken}")
+    public FinalBillResponse getFinalBill(@PathVariable String qrToken) {
+        return orderService.getFinalBill(qrToken);
     }
 }

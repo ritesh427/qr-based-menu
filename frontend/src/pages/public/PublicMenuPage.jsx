@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import CategoryTabs from "../../components/CategoryTabs";
 import MenuItemCard from "../../components/MenuItemCard";
-import { fetchMenu } from "../../api/menuApi";
+import { createServiceRequest, fetchMenu } from "../../api/menuApi";
 import { useCart } from "../../context/CartContext";
 import { getApiBaseUrl } from "../../utils/runtime";
 
@@ -14,6 +14,8 @@ export default function PublicMenuPage() {
   const [activeCategory, setActiveCategory] = useState(null);
   const [search, setSearch] = useState("");
   const [vegOnly, setVegOnly] = useState(false);
+  const [serviceMessage, setServiceMessage] = useState("");
+  const [serviceLoading, setServiceLoading] = useState("");
 
   useEffect(() => {
     setError("");
@@ -44,6 +46,16 @@ export default function PublicMenuPage() {
   const visibleCategory =
     filteredCategories.find((category) => category.id === activeCategory) || filteredCategories[0];
 
+  const requestService = async (type) => {
+    setServiceLoading(type);
+    try {
+      await createServiceRequest({ qrToken, type });
+      setServiceMessage(type === "CALL_WAITER" ? "Waiter has been notified." : "Bill request sent to the counter.");
+    } finally {
+      setServiceLoading("");
+    }
+  };
+
   if (!menu) {
     return (
       <div className="p-6 text-center text-sand-700">
@@ -61,6 +73,11 @@ export default function PublicMenuPage() {
         <p className="mt-3 max-w-2xl text-sm text-sand-700 md:text-base">
           Scan, browse, and order without waiting. Your table number is already attached to this session.
         </p>
+        {serviceMessage && (
+          <p className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+            {serviceMessage}
+          </p>
+        )}
         <div className="mt-6 flex flex-col gap-3 md:flex-row">
           <input
             value={search}
@@ -89,6 +106,30 @@ export default function PublicMenuPage() {
           >
             My Orders
           </Link>
+          <Link
+            to={`/bill/${qrToken}`}
+            className="rounded-2xl border border-sand-300 bg-white px-5 py-3 text-center text-sm font-semibold text-sand-900"
+          >
+            Final Bill
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => requestService("CALL_WAITER")}
+            disabled={serviceLoading === "CALL_WAITER"}
+            className="rounded-2xl border border-sand-300 bg-white px-5 py-3 text-sm font-semibold text-sand-900 disabled:opacity-60"
+          >
+            {serviceLoading === "CALL_WAITER" ? "Sending..." : "Call Waiter"}
+          </button>
+          <button
+            type="button"
+            onClick={() => requestService("REQUEST_BILL")}
+            disabled={serviceLoading === "REQUEST_BILL"}
+            className="rounded-2xl border border-sand-300 bg-white px-5 py-3 text-sm font-semibold text-sand-900 disabled:opacity-60"
+          >
+            {serviceLoading === "REQUEST_BILL" ? "Sending..." : "Request Bill"}
+          </button>
         </div>
       </section>
 
@@ -105,7 +146,7 @@ export default function PublicMenuPage() {
                 key={item.id}
                 item={item}
                 onAdd={addItem}
-                quantity={items.find((entry) => entry.id === item.id)?.quantity || 0}
+                cartItems={items}
               />
             ))}
           </div>

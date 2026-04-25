@@ -35,6 +35,13 @@ public class OrderItem {
     @Column(nullable = false)
     private Integer quantity;
 
+    private String selectedVariantName;
+
+    @Column(length = 2000)
+    private String selectedAddonNames;
+
+    private Integer estimatedPreparationTime;
+
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal unitPrice;
 

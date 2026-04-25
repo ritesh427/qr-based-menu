@@ -2,17 +2,26 @@ import { useEffect, useMemo, useState } from "react";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import {
+  createCoupon,
   createTables,
   createCategory,
   createMenuItem,
   deleteMenuItem,
   fetchAdminCategories,
+  fetchAdminFinalBill,
   fetchAdminMenuItems,
+  fetchCoupons,
+  fetchKitchenOrders,
   fetchOrderStats,
   fetchOrders,
   fetchQrCodes,
+  fetchServiceRequests,
+  fetchTableSessions,
   toggleMenuItemAvailability,
   uploadMenuImage,
+  updateMenuItem,
+  updateOrderPayment,
+  updateServiceRequestStatus,
   updateOrderStatus
 } from "../../api/menuApi";
 import OrderStatusBadge from "../../components/OrderStatusBadge";
@@ -25,8 +34,27 @@ const defaultItem = {
   imageUrl: "",
   available: true,
   vegetarian: true,
+  stockQuantity: 0,
   estimatedPreparationTime: 10,
-  categoryId: ""
+  categoryId: "",
+  variants: [],
+  addons: []
+};
+
+const defaultVariant = {
+  name: "",
+  priceAdjustment: 0,
+  stockQuantity: 0,
+  available: true,
+  estimatedPreparationTime: 10
+};
+
+const defaultAddon = {
+  name: "",
+  price: 0,
+  stockQuantity: 0,
+  available: true,
+  estimatedPreparationTime: 10
 };
 
 export default function AdminDashboardPage() {
@@ -35,25 +63,50 @@ export default function AdminDashboardPage() {
   const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState(null);
   const [qrs, setQrs] = useState([]);
+  const [kitchenOrders, setKitchenOrders] = useState([]);
+  const [serviceRequests, setServiceRequests] = useState([]);
+  const [tableSessions, setTableSessions] = useState([]);
   const [categoryName, setCategoryName] = useState("");
+  const [coupons, setCoupons] = useState([]);
+  const [couponForm, setCouponForm] = useState({
+    code: "",
+    description: "",
+    discountValue: "",
+    percentage: true,
+    active: true,
+    minimumOrderAmount: 0,
+    maxDiscountAmount: 0
+  });
   const [itemForm, setItemForm] = useState(defaultItem);
   const [itemImageFile, setItemImageFile] = useState(null);
   const [itemImagePreview, setItemImagePreview] = useState("");
   const [tableForm, setTableForm] = useState({ startTableNumber: "", count: 1 });
+  const [stockDrafts, setStockDrafts] = useState({});
+  const [selectedBillToken, setSelectedBillToken] = useState("");
+  const [billPreview, setBillPreview] = useState(null);
 
   const load = async () => {
-    const [categoryData, menuData, orderData, statsData, qrData] = await Promise.all([
+    const [categoryData, menuData, orderData, statsData, qrData, kitchenData, requestData, sessionData, couponData] = await Promise.all([
       fetchAdminCategories(),
       fetchAdminMenuItems(),
       fetchOrders(),
       fetchOrderStats(),
-      fetchQrCodes()
+      fetchQrCodes(),
+      fetchKitchenOrders(),
+      fetchServiceRequests(),
+      fetchTableSessions(),
+      fetchCoupons()
     ]);
     setCategories(categoryData);
     setMenuItems(menuData);
     setOrders(orderData);
     setStats(statsData);
     setQrs(qrData);
+    setKitchenOrders(kitchenData);
+    setServiceRequests(requestData);
+    setTableSessions(sessionData);
+    setCoupons(couponData);
+    setStockDrafts(Object.fromEntries(menuData.map((item) => [item.id, item.stockQuantity ?? 0])));
     if (!itemForm.categoryId && categoryData[0]) {
       setItemForm((current) => ({ ...current, categoryId: categoryData[0].id }));
     }
@@ -84,6 +137,39 @@ export default function AdminDashboardPage() {
           }
           return current.map((entry) => (entry.id === incoming.id ? incoming : entry));
         });
+        setKitchenOrders((current) => {
+          const activeStatuses = ["CONFIRMED", "PREPARING", "READY"];
+          const existing = current.find((entry) => entry.id === incoming.id);
+          if (!activeStatuses.includes(incoming.status)) {
+            return current.filter((entry) => entry.id !== incoming.id);
+          }
+          if (!existing) {
+            return [...current, incoming];
+          }
+          return current.map((entry) => (entry.id === incoming.id ? incoming : entry));
+        });
+      });
+      client.subscribe(`/topic/assistance/${restaurantId}`, (message) => {
+        const incoming = JSON.parse(message.body);
+        setServiceRequests((current) => {
+          const existing = current.find((entry) => entry.id === incoming.id);
+          if (!existing) {
+            return [incoming, ...current];
+          }
+          return current.map((entry) => (entry.id === incoming.id ? incoming : entry));
+        });
+      });
+      client.subscribe(`/topic/table-sessions/${restaurantId}`, (message) => {
+        const incoming = JSON.parse(message.body);
+        setTableSessions((current) => {
+          const existing = current.find((entry) => entry.qrToken === incoming.qrToken);
+          if (!existing) {
+            return [...current, incoming].sort((a, b) => a.tableNumber - b.tableNumber);
+          }
+          return current
+            .map((entry) => (entry.qrToken === incoming.qrToken ? incoming : entry))
+            .sort((a, b) => a.tableNumber - b.tableNumber);
+        });
       });
     };
 
@@ -112,6 +198,26 @@ export default function AdminDashboardPage() {
     load();
   };
 
+  const handleCouponSubmit = async (event) => {
+    event.preventDefault();
+    await createCoupon({
+      ...couponForm,
+      discountValue: Number(couponForm.discountValue),
+      minimumOrderAmount: Number(couponForm.minimumOrderAmount),
+      maxDiscountAmount: Number(couponForm.maxDiscountAmount)
+    });
+    setCouponForm({
+      code: "",
+      description: "",
+      discountValue: "",
+      percentage: true,
+      active: true,
+      minimumOrderAmount: 0,
+      maxDiscountAmount: 0
+    });
+    load();
+  };
+
   const handleItemSubmit = async (event) => {
     event.preventDefault();
     let imageUrl = itemForm.imageUrl;
@@ -124,7 +230,21 @@ export default function AdminDashboardPage() {
     await createMenuItem({
       ...itemForm,
       price: Number(itemForm.price),
+      stockQuantity: Number(itemForm.stockQuantity),
       categoryId: Number(itemForm.categoryId),
+      estimatedPreparationTime: Number(itemForm.estimatedPreparationTime),
+      variants: itemForm.variants.map((variant) => ({
+        ...variant,
+        priceAdjustment: Number(variant.priceAdjustment),
+        stockQuantity: Number(variant.stockQuantity),
+        estimatedPreparationTime: Number(variant.estimatedPreparationTime)
+      })),
+      addons: itemForm.addons.map((addon) => ({
+        ...addon,
+        price: Number(addon.price),
+        stockQuantity: Number(addon.stockQuantity),
+        estimatedPreparationTime: Number(addon.estimatedPreparationTime)
+      })),
       imageUrl
     });
     setItemForm({ ...defaultItem, categoryId: categories[0]?.id || "" });
@@ -143,6 +263,92 @@ export default function AdminDashboardPage() {
     load();
   };
 
+  const handleStockSave = async (item) => {
+    const nextStock = Math.max(0, Number(stockDrafts[item.id] ?? item.stockQuantity ?? 0));
+    await updateMenuItem(item.id, {
+      name: item.name,
+      description: item.description,
+      price: Number(item.price),
+      imageUrl: item.imageUrl,
+      available: item.available && nextStock > 0,
+      vegetarian: item.vegetarian,
+      stockQuantity: nextStock,
+      estimatedPreparationTime: item.estimatedPreparationTime ?? 10,
+      categoryId: item.categoryId,
+      variants: (item.variants ?? []).map((variant) => ({
+        name: variant.name,
+        priceAdjustment: Number(variant.priceAdjustment),
+        stockQuantity: Number(variant.stockQuantity),
+        available: variant.available,
+        estimatedPreparationTime: Number(variant.estimatedPreparationTime ?? 10)
+      })),
+      addons: (item.addons ?? []).map((addon) => ({
+        name: addon.name,
+        price: Number(addon.price),
+        stockQuantity: Number(addon.stockQuantity),
+        available: addon.available,
+        estimatedPreparationTime: Number(addon.estimatedPreparationTime ?? 10)
+      }))
+    });
+    load();
+  };
+
+  const addVariantRow = () => {
+    setItemForm((current) => ({
+      ...current,
+      variants: [...current.variants, { ...defaultVariant }]
+    }));
+  };
+
+  const updateVariantRow = (index, field, value) => {
+    setItemForm((current) => ({
+      ...current,
+      variants: current.variants.map((variant, variantIndex) =>
+        variantIndex === index ? { ...variant, [field]: value } : variant
+      )
+    }));
+  };
+
+  const removeVariantRow = (index) => {
+    setItemForm((current) => ({
+      ...current,
+      variants: current.variants.filter((_, variantIndex) => variantIndex !== index)
+    }));
+  };
+
+  const addAddonRow = () => {
+    setItemForm((current) => ({
+      ...current,
+      addons: [...current.addons, { ...defaultAddon }]
+    }));
+  };
+
+  const updateAddonRow = (index, field, value) => {
+    setItemForm((current) => ({
+      ...current,
+      addons: current.addons.map((addon, addonIndex) =>
+        addonIndex === index ? { ...addon, [field]: value } : addon
+      )
+    }));
+  };
+
+  const removeAddonRow = (index) => {
+    setItemForm((current) => ({
+      ...current,
+      addons: current.addons.filter((_, addonIndex) => addonIndex !== index)
+    }));
+  };
+
+  const loadBillPreview = async (qrToken) => {
+    if (!qrToken) {
+      setBillPreview(null);
+      return;
+    }
+    setSelectedBillToken(qrToken);
+    const data = await fetchAdminFinalBill(qrToken);
+    setBillPreview(data);
+  };
+
   return (
     <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
       <div className="space-y-6">
@@ -156,6 +362,38 @@ export default function AdminDashboardPage() {
         </section>
 
         <section className="glass-card p-6">
+          <h2 className="font-display text-2xl text-sand-900">Kitchen Board</h2>
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            {["CONFIRMED", "PREPARING", "READY"].map((lane) => (
+              <div key={lane} className="rounded-3xl bg-white p-4">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.25em] text-sand-500">{lane}</h3>
+                <div className="mt-4 space-y-3">
+                  {kitchenOrders.filter((order) => order.status === lane).map((order) => (
+                    <article key={order.id} className="rounded-2xl bg-sand-50 p-3">
+                      <p className="font-semibold text-sand-900">Table {order.tableNumber}</p>
+                      <p className="text-sm text-sand-600">Order #{order.id}</p>
+                      <p className="text-sm text-sand-600">ETA {order.estimatedReadyInMinutes || 10} min</p>
+                      <div className="mt-3 space-y-1 text-sm text-sand-700">
+                        {order.items.map((item) => (
+                          <div key={`${order.id}-${item.menuItemId}-${item.variantName || "base"}-${item.addonNames || "none"}`}>
+                            {item.itemName}
+                            {item.variantName ? ` (${item.variantName})` : ""}
+                            {item.addonNames ? ` + ${item.addonNames}` : ""} x {item.quantity}
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                  {kitchenOrders.filter((order) => order.status === lane).length === 0 && (
+                    <p className="text-sm text-sand-500">No tickets in this lane.</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="glass-card p-6">
           <h2 className="font-display text-2xl text-sand-900">Live Orders</h2>
           <div className="mt-5 space-y-4">
             {orders.map((order) => (
@@ -166,9 +404,33 @@ export default function AdminDashboardPage() {
                     <p className="font-semibold text-sand-900">
                       Table {order.tableNumber} • Rs. {order.totalAmount}
                     </p>
+                    <p className="text-sm text-sand-600">ETA {order.estimatedReadyInMinutes || 10} min</p>
+                    <p className="text-sm text-sand-600">
+                      {order.paymentMethod?.replaceAll("_", " ")} • {order.paymentStatus}
+                    </p>
+                    {order.appliedCouponCode && (
+                      <p className="text-sm text-emerald-700">Coupon: {order.appliedCouponCode}</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <OrderStatusBadge status={order.status} />
+                    <select
+                      value={order.paymentStatus}
+                      onChange={async (event) => {
+                        await updateOrderPayment(order.id, {
+                          paymentStatus: event.target.value,
+                          paymentMethod: order.paymentMethod
+                        });
+                        load();
+                      }}
+                      className="rounded-xl border border-sand-200 px-3 py-2 text-sm"
+                    >
+                      {["PENDING", "PAID"].map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
                     <select
                       value={order.status}
                       onChange={async (event) => {
@@ -187,8 +449,10 @@ export default function AdminDashboardPage() {
                 </div>
                 <div className="mt-4 grid gap-2 text-sm text-sand-700 md:grid-cols-2">
                   {order.items.map((item) => (
-                    <div key={`${order.id}-${item.menuItemId}`} className="rounded-2xl bg-sand-50 px-3 py-2">
-                      {item.itemName} x {item.quantity}
+                    <div key={`${order.id}-${item.menuItemId}-${item.variantName || "base"}-${item.addonNames || "none"}`} className="rounded-2xl bg-sand-50 px-3 py-2">
+                      {item.itemName}
+                      {item.variantName ? ` (${item.variantName})` : ""}
+                      {item.addonNames ? ` + ${item.addonNames}` : ""} x {item.quantity}
                     </div>
                   ))}
                 </div>
@@ -207,8 +471,34 @@ export default function AdminDashboardPage() {
                   <p className="text-sm text-sand-600">
                     {item.categoryName} • Rs. {item.price}
                   </p>
+                  <p className="text-sm text-sand-600">Stock: {item.stockQuantity}</p>
+                  <p className="text-sm text-sand-600">ETA: {item.estimatedPreparationTime || 10} min</p>
+                  <p className="text-sm text-sand-600">
+                    {item.variants?.length || 0} variant(s) â€¢ {item.addons?.length || 0} add-on(s)
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      value={stockDrafts[item.id] ?? item.stockQuantity ?? 0}
+                      onChange={(event) =>
+                        setStockDrafts((current) => ({
+                          ...current,
+                          [item.id]: event.target.value
+                        }))
+                      }
+                      className="w-24 rounded-xl border border-sand-200 px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleStockSave(item)}
+                      className="rounded-full bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-800"
+                    >
+                      Save Stock
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={async () => {
@@ -240,6 +530,107 @@ export default function AdminDashboardPage() {
 
       <div className="space-y-6">
         <section className="glass-card p-6">
+          <h2 className="font-display text-2xl text-sand-900">Service Requests</h2>
+          <div className="mt-4 space-y-3">
+            {serviceRequests.map((request) => (
+              <article key={request.id} className="rounded-3xl bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-sand-900">Table {request.tableNumber}</p>
+                    <p className="text-sm text-sand-600">{request.type.replace("_", " ")}</p>
+                  </div>
+                  <select
+                    value={request.status}
+                    onChange={async (event) => {
+                      await updateServiceRequestStatus(request.id, event.target.value);
+                      load();
+                    }}
+                    className="rounded-xl border border-sand-200 px-3 py-2 text-sm"
+                  >
+                    {["OPEN", "ACKNOWLEDGED", "RESOLVED"].map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </div>
+                {request.note && <p className="mt-3 text-sm text-sand-700">{request.note}</p>}
+              </article>
+            ))}
+            {serviceRequests.length === 0 && <p className="text-sm text-sand-500">No service requests yet.</p>}
+          </div>
+        </section>
+
+        <section className="glass-card p-6">
+          <h2 className="font-display text-2xl text-sand-900">Table Sessions</h2>
+          <div className="mt-4 space-y-3">
+            {tableSessions.map((session) => (
+              <article key={session.qrToken} className="rounded-3xl bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-sand-900">Table {session.tableNumber}</p>
+                    <p className="text-sm text-sand-600">
+                      {session.activeOrderCount} active order(s) • Rs. {session.activeOrderTotal}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs uppercase tracking-[0.25em] text-sand-500">Latest</p>
+                    <p className="text-sm font-semibold text-sand-900">{session.latestOrderStatus || "IDLE"}</p>
+                  </div>
+                </div>
+                {session.openRequests.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {session.openRequests.map((request) => (
+                      <span key={request.id} className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                        {request.type.replace("_", " ")}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+          <div className="mt-5 rounded-3xl bg-white p-4">
+            <div className="flex flex-col gap-3 md:flex-row">
+              <select
+                value={selectedBillToken}
+                onChange={(event) => loadBillPreview(event.target.value)}
+                className="w-full rounded-2xl border border-sand-200 px-4 py-3"
+              >
+                <option value="">Select table for bill preview</option>
+                {tableSessions.map((session) => (
+                  <option key={session.qrToken} value={session.qrToken}>
+                    Table {session.tableNumber}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {billPreview && (
+              <div className="mt-4 space-y-2 text-sm text-sand-700">
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span>Rs. {Number(billPreview.subtotalAmount).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Discount</span>
+                  <span>Rs. {Number(billPreview.discountAmount).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total</span>
+                  <span>Rs. {Number(billPreview.payableAmount).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-emerald-700">
+                  <span>Paid</span>
+                  <span>Rs. {Number(billPreview.paidAmount).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-semibold text-red-700">
+                  <span>Pending</span>
+                  <span>Rs. {Number(billPreview.pendingAmount).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="glass-card p-6">
           <h2 className="font-display text-2xl text-sand-900">Add Category</h2>
           <form className="mt-4 space-y-3" onSubmit={handleCategorySubmit}>
             <input
@@ -255,11 +646,94 @@ export default function AdminDashboardPage() {
         </section>
 
         <section className="glass-card p-6">
+          <h2 className="font-display text-2xl text-sand-900">Coupons</h2>
+          <form className="mt-4 space-y-3" onSubmit={handleCouponSubmit}>
+            <input
+              value={couponForm.code}
+              onChange={(event) => setCouponForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}
+              placeholder="Coupon code"
+              className="w-full rounded-2xl border border-sand-200 px-4 py-3"
+            />
+            <input
+              value={couponForm.description}
+              onChange={(event) => setCouponForm((current) => ({ ...current, description: event.target.value }))}
+              placeholder="Description"
+              className="w-full rounded-2xl border border-sand-200 px-4 py-3"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="number"
+                min="0"
+                value={couponForm.discountValue}
+                onChange={(event) => setCouponForm((current) => ({ ...current, discountValue: event.target.value }))}
+                placeholder="Discount"
+                className="rounded-2xl border border-sand-200 px-4 py-3"
+              />
+              <label className="rounded-2xl bg-white px-4 py-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={couponForm.percentage}
+                  onChange={() => setCouponForm((current) => ({ ...current, percentage: !current.percentage }))}
+                /> Percentage discount
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="number"
+                min="0"
+                value={couponForm.minimumOrderAmount}
+                onChange={(event) => setCouponForm((current) => ({ ...current, minimumOrderAmount: event.target.value }))}
+                placeholder="Minimum order"
+                className="rounded-2xl border border-sand-200 px-4 py-3"
+              />
+              <input
+                type="number"
+                min="0"
+                value={couponForm.maxDiscountAmount}
+                onChange={(event) => setCouponForm((current) => ({ ...current, maxDiscountAmount: event.target.value }))}
+                placeholder="Max discount"
+                className="rounded-2xl border border-sand-200 px-4 py-3"
+              />
+            </div>
+            <button type="submit" className="w-full rounded-2xl bg-paprika-500 px-4 py-3 font-semibold text-white">
+              Create Coupon
+            </button>
+          </form>
+          <div className="mt-4 space-y-3">
+            {coupons.map((coupon) => (
+              <div key={coupon.id} className="rounded-2xl bg-white p-4 text-sm text-sand-700">
+                <p className="font-semibold text-sand-900">{coupon.code}</p>
+                <p>{coupon.description}</p>
+                <p className="mt-1">
+                  {coupon.percentage ? `${coupon.discountValue}% off` : `Rs. ${coupon.discountValue} off`}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="glass-card p-6">
           <h2 className="font-display text-2xl text-sand-900">Add Menu Item</h2>
           <form className="mt-4 space-y-3" onSubmit={handleItemSubmit}>
             <input value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} placeholder="Name" className="w-full rounded-2xl border border-sand-200 px-4 py-3" />
             <textarea value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} placeholder="Description" rows={3} className="w-full rounded-2xl border border-sand-200 px-4 py-3" />
             <input value={itemForm.price} onChange={(e) => setItemForm({ ...itemForm, price: e.target.value })} placeholder="Price" className="w-full rounded-2xl border border-sand-200 px-4 py-3" />
+            <input
+              type="number"
+              min="0"
+              value={itemForm.stockQuantity}
+              onChange={(e) => setItemForm({ ...itemForm, stockQuantity: e.target.value })}
+              placeholder="Stock quantity"
+              className="w-full rounded-2xl border border-sand-200 px-4 py-3"
+            />
+            <input
+              type="number"
+              min="1"
+              value={itemForm.estimatedPreparationTime}
+              onChange={(e) => setItemForm({ ...itemForm, estimatedPreparationTime: e.target.value })}
+              placeholder="Estimated prep time (min)"
+              className="w-full rounded-2xl border border-sand-200 px-4 py-3"
+            />
             <input value={itemForm.imageUrl} onChange={(e) => setItemForm({ ...itemForm, imageUrl: e.target.value })} placeholder="Image URL (optional if uploading file)" className="w-full rounded-2xl border border-sand-200 px-4 py-3" />
             <label className="block rounded-2xl border border-dashed border-sand-300 bg-white px-4 py-4 text-sm text-sand-700">
               <span className="mb-2 block font-semibold text-sand-900">Upload Item Image</span>
@@ -288,6 +762,148 @@ export default function AdminDashboardPage() {
                 </option>
               ))}
             </select>
+            <div className="rounded-3xl bg-white p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-sand-900">Variants</p>
+                  <p className="text-sm text-sand-600">Sizes or portions with separate price and stock.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addVariantRow}
+                  className="rounded-full bg-sand-900 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Add Variant
+                </button>
+              </div>
+              <div className="mt-4 space-y-3">
+                {itemForm.variants.map((variant, index) => (
+                  <div key={`variant-${index}`} className="grid gap-3 rounded-2xl bg-sand-50 p-3 md:grid-cols-5">
+                    <input
+                      value={variant.name}
+                      onChange={(e) => updateVariantRow(index, "name", e.target.value)}
+                      placeholder="Variant name"
+                      className="rounded-2xl border border-sand-200 px-3 py-2"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      value={variant.priceAdjustment}
+                      onChange={(e) => updateVariantRow(index, "priceAdjustment", e.target.value)}
+                      placeholder="Price +"
+                      className="rounded-2xl border border-sand-200 px-3 py-2"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      value={variant.stockQuantity}
+                      onChange={(e) => updateVariantRow(index, "stockQuantity", e.target.value)}
+                      placeholder="Stock"
+                      className="rounded-2xl border border-sand-200 px-3 py-2"
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      value={variant.estimatedPreparationTime}
+                      onChange={(e) => updateVariantRow(index, "estimatedPreparationTime", e.target.value)}
+                      placeholder="ETA"
+                      className="rounded-2xl border border-sand-200 px-3 py-2"
+                    />
+                    <div className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2 text-sm">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={variant.available}
+                          onChange={() => updateVariantRow(index, "available", !variant.available)}
+                        />
+                        Active
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => removeVariantRow(index)}
+                        className="font-semibold text-red-600"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {itemForm.variants.length === 0 && (
+                  <p className="text-sm text-sand-500">No variants yet. Add one for half/full, regular/large, and more.</p>
+                )}
+              </div>
+            </div>
+            <div className="rounded-3xl bg-white p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-sand-900">Add-ons</p>
+                  <p className="text-sm text-sand-600">Extras with separate stock and pricing.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addAddonRow}
+                  className="rounded-full bg-paprika-500 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Add Add-on
+                </button>
+              </div>
+              <div className="mt-4 space-y-3">
+                {itemForm.addons.map((addon, index) => (
+                  <div key={`addon-${index}`} className="grid gap-3 rounded-2xl bg-sand-50 p-3 md:grid-cols-5">
+                    <input
+                      value={addon.name}
+                      onChange={(e) => updateAddonRow(index, "name", e.target.value)}
+                      placeholder="Add-on name"
+                      className="rounded-2xl border border-sand-200 px-3 py-2"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      value={addon.price}
+                      onChange={(e) => updateAddonRow(index, "price", e.target.value)}
+                      placeholder="Price"
+                      className="rounded-2xl border border-sand-200 px-3 py-2"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      value={addon.stockQuantity}
+                      onChange={(e) => updateAddonRow(index, "stockQuantity", e.target.value)}
+                      placeholder="Stock"
+                      className="rounded-2xl border border-sand-200 px-3 py-2"
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      value={addon.estimatedPreparationTime}
+                      onChange={(e) => updateAddonRow(index, "estimatedPreparationTime", e.target.value)}
+                      placeholder="ETA"
+                      className="rounded-2xl border border-sand-200 px-3 py-2"
+                    />
+                    <div className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2 text-sm">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={addon.available}
+                          onChange={() => updateAddonRow(index, "available", !addon.available)}
+                        />
+                        Active
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => removeAddonRow(index)}
+                        className="font-semibold text-red-600"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {itemForm.addons.length === 0 && (
+                  <p className="text-sm text-sand-500">No add-ons yet. Add one for cheese, naan, sauces, or extras.</p>
+                )}
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="rounded-2xl bg-white px-4 py-3 text-sm">
                 <input type="checkbox" checked={itemForm.available} onChange={() => setItemForm({ ...itemForm, available: !itemForm.available })} /> Available
