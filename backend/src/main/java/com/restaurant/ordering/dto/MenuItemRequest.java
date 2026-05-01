@@ -20,6 +20,7 @@ public record MenuItemRequest(
         Integer estimatedPreparationTime,
         @NotNull Long categoryId,
         @Valid List<MenuItemVariantRequest> variants,
-        @Valid List<MenuItemAddonRequest> addons
+        @Valid List<MenuItemAddonRequest> addons,
+        @Valid List<MenuItemTranslationRequest> translations
 ) {
 }

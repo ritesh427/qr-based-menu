@@ -10,6 +10,7 @@ import {
   fetchAdminCategories,
   fetchAdminFinalBill,
   fetchAdminMenuItems,
+  fetchAdminReviews,
   fetchCoupons,
   fetchKitchenOrders,
   fetchOrderStats,
@@ -38,7 +39,8 @@ const defaultItem = {
   estimatedPreparationTime: 10,
   categoryId: "",
   variants: [],
-  addons: []
+  addons: [],
+  translations: []
 };
 
 const defaultVariant = {
@@ -57,6 +59,12 @@ const defaultAddon = {
   estimatedPreparationTime: 10
 };
 
+const defaultTranslation = {
+  languageCode: "hi",
+  name: "",
+  description: ""
+};
+
 export default function AdminDashboardPage() {
   const [categories, setCategories] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
@@ -66,6 +74,7 @@ export default function AdminDashboardPage() {
   const [kitchenOrders, setKitchenOrders] = useState([]);
   const [serviceRequests, setServiceRequests] = useState([]);
   const [tableSessions, setTableSessions] = useState([]);
+  const [reviews, setReviews] = useState([]);
   const [categoryName, setCategoryName] = useState("");
   const [coupons, setCoupons] = useState([]);
   const [couponForm, setCouponForm] = useState({
@@ -84,9 +93,10 @@ export default function AdminDashboardPage() {
   const [stockDrafts, setStockDrafts] = useState({});
   const [selectedBillToken, setSelectedBillToken] = useState("");
   const [billPreview, setBillPreview] = useState(null);
+  const [activeWorkspace, setActiveWorkspace] = useState("operations");
 
   const load = async () => {
-    const [categoryData, menuData, orderData, statsData, qrData, kitchenData, requestData, sessionData, couponData] = await Promise.all([
+    const [categoryData, menuData, orderData, statsData, qrData, kitchenData, requestData, sessionData, couponData, reviewData] = await Promise.all([
       fetchAdminCategories(),
       fetchAdminMenuItems(),
       fetchOrders(),
@@ -95,7 +105,8 @@ export default function AdminDashboardPage() {
       fetchKitchenOrders(),
       fetchServiceRequests(),
       fetchTableSessions(),
-      fetchCoupons()
+      fetchCoupons(),
+      fetchAdminReviews()
     ]);
     setCategories(categoryData);
     setMenuItems(menuData);
@@ -106,6 +117,7 @@ export default function AdminDashboardPage() {
     setServiceRequests(requestData);
     setTableSessions(sessionData);
     setCoupons(couponData);
+    setReviews(reviewData);
     setStockDrafts(Object.fromEntries(menuData.map((item) => [item.id, item.stockQuantity ?? 0])));
     if (!itemForm.categoryId && categoryData[0]) {
       setItemForm((current) => ({ ...current, categoryId: categoryData[0].id }));
@@ -191,6 +203,17 @@ export default function AdminDashboardPage() {
     [stats]
   );
 
+  const workspaceTabs = useMemo(
+    () => [
+      { id: "operations", label: "Operations", detail: `${orders.length} orders` },
+      { id: "menu", label: "Menu Setup", detail: `${menuItems.length} items` },
+      { id: "tables", label: "Tables & Bills", detail: `${qrs.length} tables` },
+      { id: "coupons", label: "Coupons", detail: `${coupons.length} active` },
+      { id: "growth", label: "Growth", detail: `${reviews.length} reviews` }
+    ],
+    [orders.length, menuItems.length, qrs.length, coupons.length, reviews.length]
+  );
+
   const handleCategorySubmit = async (event) => {
     event.preventDefault();
     await createCategory({ name: categoryName, description: `${categoryName} items` });
@@ -245,6 +268,10 @@ export default function AdminDashboardPage() {
         stockQuantity: Number(addon.stockQuantity),
         estimatedPreparationTime: Number(addon.estimatedPreparationTime)
       })),
+      translations: itemForm.translations.map((translation) => ({
+        ...translation,
+        languageCode: translation.languageCode.toLowerCase()
+      })),
       imageUrl
     });
     setItemForm({ ...defaultItem, categoryId: categories[0]?.id || "" });
@@ -288,6 +315,11 @@ export default function AdminDashboardPage() {
         stockQuantity: Number(addon.stockQuantity),
         available: addon.available,
         estimatedPreparationTime: Number(addon.estimatedPreparationTime ?? 10)
+      })),
+      translations: (item.translations ?? []).map((translation) => ({
+        languageCode: translation.languageCode,
+        name: translation.name,
+        description: translation.description
       }))
     });
     load();
@@ -339,6 +371,29 @@ export default function AdminDashboardPage() {
     }));
   };
 
+  const addTranslationRow = () => {
+    setItemForm((current) => ({
+      ...current,
+      translations: [...current.translations, { ...defaultTranslation }]
+    }));
+  };
+
+  const updateTranslationRow = (index, field, value) => {
+    setItemForm((current) => ({
+      ...current,
+      translations: current.translations.map((translation, translationIndex) =>
+        translationIndex === index ? { ...translation, [field]: value } : translation
+      )
+    }));
+  };
+
+  const removeTranslationRow = (index) => {
+    setItemForm((current) => ({
+      ...current,
+      translations: current.translations.filter((_, translationIndex) => translationIndex !== index)
+    }));
+  };
+
   const loadBillPreview = async (qrToken) => {
     if (!qrToken) {
       setBillPreview(null);
@@ -350,7 +405,7 @@ export default function AdminDashboardPage() {
   };
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+    <div className="space-y-6">
       <div className="space-y-6">
         <section className="grid gap-4 md:grid-cols-5">
           {statCards.map(([label, value]) => (
@@ -361,7 +416,29 @@ export default function AdminDashboardPage() {
           ))}
         </section>
 
-        <section className="glass-card p-6">
+        <section className="glass-card p-2">
+          <div className="grid gap-2 md:grid-cols-5">
+            {workspaceTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveWorkspace(tab.id)}
+                className={`rounded-2xl px-4 py-3 text-left transition ${
+                  activeWorkspace === tab.id
+                    ? "bg-sand-900 text-white shadow-glow"
+                    : "bg-white text-sand-700 hover:bg-sand-100"
+                }`}
+              >
+                <span className="block text-sm font-semibold">{tab.label}</span>
+                <span className={`mt-1 block text-xs ${activeWorkspace === tab.id ? "text-sand-100" : "text-sand-500"}`}>
+                  {tab.detail}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className={activeWorkspace === "operations" ? "glass-card p-6" : "hidden"}>
           <h2 className="font-display text-2xl text-sand-900">Kitchen Board</h2>
           <div className="mt-5 grid gap-4 lg:grid-cols-3">
             {["CONFIRMED", "PREPARING", "READY"].map((lane) => (
@@ -393,7 +470,7 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        <section className="glass-card p-6">
+        <section className={activeWorkspace === "operations" ? "glass-card p-6" : "hidden"}>
           <h2 className="font-display text-2xl text-sand-900">Live Orders</h2>
           <div className="mt-5 space-y-4">
             {orders.map((order) => (
@@ -402,17 +479,17 @@ export default function AdminDashboardPage() {
                   <div>
                     <p className="text-sm text-sand-600">Order #{order.id}</p>
                     <p className="font-semibold text-sand-900">
-                      Table {order.tableNumber} • Rs. {order.totalAmount}
+                      Table {order.tableNumber} - Rs. {order.totalAmount}
                     </p>
                     <p className="text-sm text-sand-600">ETA {order.estimatedReadyInMinutes || 10} min</p>
                     <p className="text-sm text-sand-600">
-                      {order.paymentMethod?.replaceAll("_", " ")} • {order.paymentStatus}
+                      {order.paymentMethod?.replaceAll("_", " ")} - {order.paymentStatus}
                     </p>
                     {order.appliedCouponCode && (
                       <p className="text-sm text-emerald-700">Coupon: {order.appliedCouponCode}</p>
                     )}
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <OrderStatusBadge status={order.status} />
                     <select
                       value={order.paymentStatus}
@@ -461,7 +538,7 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        <section className="glass-card p-6">
+        <section className={activeWorkspace === "menu" ? "glass-card p-6" : "hidden"}>
           <h2 className="font-display text-2xl text-sand-900">Menu Items</h2>
           <div className="mt-5 grid gap-4">
             {menuItems.map((item) => (
@@ -469,12 +546,15 @@ export default function AdminDashboardPage() {
                 <div>
                   <p className="font-semibold text-sand-900">{item.name}</p>
                   <p className="text-sm text-sand-600">
-                    {item.categoryName} • Rs. {item.price}
+                    {item.categoryName} - Rs. {item.price}
                   </p>
                   <p className="text-sm text-sand-600">Stock: {item.stockQuantity}</p>
                   <p className="text-sm text-sand-600">ETA: {item.estimatedPreparationTime || 10} min</p>
                   <p className="text-sm text-sand-600">
-                    {item.variants?.length || 0} variant(s) â€¢ {item.addons?.length || 0} add-on(s)
+                    {item.variants?.length || 0} variant(s) - {item.addons?.length || 0} add-on(s)
+                  </p>
+                  <p className="text-sm text-sand-600">
+                    {Number(item.averageRating || 0).toFixed(1)} rating - {item.reviewCount || 0} review(s) - {item.orderCount || 0} order(s)
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -529,7 +609,7 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="space-y-6">
-        <section className="glass-card p-6">
+        <section className={activeWorkspace === "operations" ? "glass-card p-6" : "hidden"}>
           <h2 className="font-display text-2xl text-sand-900">Service Requests</h2>
           <div className="mt-4 space-y-3">
             {serviceRequests.map((request) => (
@@ -559,7 +639,7 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        <section className="glass-card p-6">
+        <section className={activeWorkspace === "tables" ? "glass-card p-6" : "hidden"}>
           <h2 className="font-display text-2xl text-sand-900">Table Sessions</h2>
           <div className="mt-4 space-y-3">
             {tableSessions.map((session) => (
@@ -568,7 +648,7 @@ export default function AdminDashboardPage() {
                   <div>
                     <p className="font-semibold text-sand-900">Table {session.tableNumber}</p>
                     <p className="text-sm text-sand-600">
-                      {session.activeOrderCount} active order(s) • Rs. {session.activeOrderTotal}
+                      {session.activeOrderCount} active order(s) - Rs. {session.activeOrderTotal}
                     </p>
                   </div>
                   <div className="text-right">
@@ -630,22 +710,29 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        <section className="glass-card p-6">
-          <h2 className="font-display text-2xl text-sand-900">Add Category</h2>
-          <form className="mt-4 space-y-3" onSubmit={handleCategorySubmit}>
+        <section className={activeWorkspace === "menu" ? "glass-card p-6" : "hidden"}>
+          <h2 className="font-display text-2xl text-sand-900">Category Manager</h2>
+          <form className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]" onSubmit={handleCategorySubmit}>
             <input
               value={categoryName}
               onChange={(event) => setCategoryName(event.target.value)}
               placeholder="Category name"
               className="w-full rounded-2xl border border-sand-200 px-4 py-3"
             />
-            <button type="submit" className="w-full rounded-2xl bg-paprika-500 px-4 py-3 font-semibold text-white">
+            <button type="submit" className="rounded-2xl bg-paprika-500 px-5 py-3 font-semibold text-white">
               Create Category
             </button>
           </form>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {categories.map((category) => (
+              <span key={category.id} className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-sand-700">
+                {category.name}
+              </span>
+            ))}
+          </div>
         </section>
 
-        <section className="glass-card p-6">
+        <section className={activeWorkspace === "coupons" ? "glass-card p-6" : "hidden"}>
           <h2 className="font-display text-2xl text-sand-900">Coupons</h2>
           <form className="mt-4 space-y-3" onSubmit={handleCouponSubmit}>
             <input
@@ -660,7 +747,7 @@ export default function AdminDashboardPage() {
               placeholder="Description"
               className="w-full rounded-2xl border border-sand-200 px-4 py-3"
             />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <input
                 type="number"
                 min="0"
@@ -677,7 +764,7 @@ export default function AdminDashboardPage() {
                 /> Percentage discount
               </label>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <input
                 type="number"
                 min="0"
@@ -712,7 +799,47 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        <section className="glass-card p-6">
+        <section className={activeWorkspace === "growth" ? "glass-card p-6" : "hidden"}>
+          <h2 className="font-display text-2xl text-sand-900">Reviews & Recommendations</h2>
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <div className="rounded-3xl bg-white p-4">
+              <p className="font-semibold text-sand-900">Top Menu Signals</p>
+              <div className="mt-4 space-y-3">
+                {[...menuItems]
+                  .sort((left, right) =>
+                    Number(right.averageRating || 0) * 20 + Number(right.orderCount || 0) * 2
+                    - (Number(left.averageRating || 0) * 20 + Number(left.orderCount || 0) * 2)
+                  )
+                  .slice(0, 6)
+                  .map((item) => (
+                    <div key={item.id} className="flex items-center justify-between rounded-2xl bg-sand-50 px-4 py-3 text-sm">
+                      <span className="font-semibold text-sand-900">{item.name}</span>
+                      <span className="text-sand-600">
+                        {Number(item.averageRating || 0).toFixed(1)} rating - {item.orderCount || 0} ordered
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+            <div className="rounded-3xl bg-white p-4">
+              <p className="font-semibold text-sand-900">Recent Reviews</p>
+              <div className="mt-4 space-y-3">
+                {reviews.map((review) => (
+                  <article key={review.id} className="rounded-2xl bg-sand-50 p-4 text-sm text-sand-700">
+                    <p className="font-semibold text-sand-900">
+                      {review.itemName} - {review.rating} rating
+                    </p>
+                    {review.comment && <p className="mt-1">{review.comment}</p>}
+                    <p className="mt-2 text-xs text-sand-500">Table QR: {review.qrToken}</p>
+                  </article>
+                ))}
+                {reviews.length === 0 && <p className="text-sm text-sand-500">No customer reviews yet.</p>}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className={activeWorkspace === "menu" ? "glass-card p-6" : "hidden"}>
           <h2 className="font-display text-2xl text-sand-900">Add Menu Item</h2>
           <form className="mt-4 space-y-3" onSubmit={handleItemSubmit}>
             <input value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} placeholder="Name" className="w-full rounded-2xl border border-sand-200 px-4 py-3" />
@@ -904,6 +1031,55 @@ export default function AdminDashboardPage() {
                 )}
               </div>
             </div>
+            <div className="rounded-3xl bg-white p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-sand-900">Translations</p>
+                  <p className="text-sm text-sand-600">Optional menu copy for Hindi, Spanish, or another language code.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addTranslationRow}
+                  className="rounded-full bg-sand-900 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Add Translation
+                </button>
+              </div>
+              <div className="mt-4 space-y-3">
+                {itemForm.translations.map((translation, index) => (
+                  <div key={`translation-${index}`} className="grid gap-3 rounded-2xl bg-sand-50 p-3 md:grid-cols-[100px_1fr_1fr_auto]">
+                    <input
+                      value={translation.languageCode}
+                      onChange={(event) => updateTranslationRow(index, "languageCode", event.target.value)}
+                      placeholder="hi"
+                      className="rounded-2xl border border-sand-200 px-3 py-2"
+                    />
+                    <input
+                      value={translation.name}
+                      onChange={(event) => updateTranslationRow(index, "name", event.target.value)}
+                      placeholder="Translated name"
+                      className="rounded-2xl border border-sand-200 px-3 py-2"
+                    />
+                    <input
+                      value={translation.description}
+                      onChange={(event) => updateTranslationRow(index, "description", event.target.value)}
+                      placeholder="Translated description"
+                      className="rounded-2xl border border-sand-200 px-3 py-2"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeTranslationRow(index)}
+                      className="rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-red-600"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                {itemForm.translations.length === 0 && (
+                  <p className="text-sm text-sand-500">No translations yet. English remains the fallback.</p>
+                )}
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="rounded-2xl bg-white px-4 py-3 text-sm">
                 <input type="checkbox" checked={itemForm.available} onChange={() => setItemForm({ ...itemForm, available: !itemForm.available })} /> Available
@@ -918,7 +1094,7 @@ export default function AdminDashboardPage() {
           </form>
         </section>
 
-        <section className="glass-card p-6">
+        <section className={activeWorkspace === "tables" ? "glass-card p-6" : "hidden"}>
           <div className="flex items-center justify-between">
             <h2 className="font-display text-2xl text-sand-900">Tables & QR Codes</h2>
           </div>
@@ -940,7 +1116,7 @@ export default function AdminDashboardPage() {
               Create Tables
             </button>
           </form>
-          <div className="mt-4 space-y-4">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {qrs.map((qr) => (
               <article key={qr.qrToken} className="rounded-3xl bg-white p-4">
                 <p className="font-semibold text-sand-900">Table {qr.tableNumber}</p>

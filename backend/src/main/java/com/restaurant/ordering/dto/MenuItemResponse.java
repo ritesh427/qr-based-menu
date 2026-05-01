@@ -15,7 +15,11 @@ public record MenuItemResponse(
         Integer estimatedPreparationTime,
         Long categoryId,
         String categoryName,
+        Double averageRating,
+        Long reviewCount,
+        Long orderCount,
         List<MenuItemVariantResponse> variants,
-        List<MenuItemAddonResponse> addons
+        List<MenuItemAddonResponse> addons,
+        List<MenuItemTranslationResponse> translations
 ) {
 }

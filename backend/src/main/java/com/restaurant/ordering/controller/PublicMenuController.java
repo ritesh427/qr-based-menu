@@ -10,9 +10,12 @@ import com.restaurant.ordering.dto.OrderQuoteResponse;
 import com.restaurant.ordering.dto.OrderRequest;
 import com.restaurant.ordering.dto.OrderResponse;
 import com.restaurant.ordering.dto.QrMenuResponse;
+import com.restaurant.ordering.dto.ReviewRequest;
+import com.restaurant.ordering.dto.ReviewResponse;
 import com.restaurant.ordering.service.AssistanceRequestService;
 import com.restaurant.ordering.service.MenuService;
 import com.restaurant.ordering.service.OrderService;
+import com.restaurant.ordering.service.ReviewService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,18 +31,29 @@ public class PublicMenuController {
     private final MenuService menuService;
     private final OrderService orderService;
     private final AssistanceRequestService assistanceRequestService;
+    private final ReviewService reviewService;
 
     public PublicMenuController(MenuService menuService,
                                 OrderService orderService,
-                                AssistanceRequestService assistanceRequestService) {
+                                AssistanceRequestService assistanceRequestService,
+                                ReviewService reviewService) {
         this.menuService = menuService;
         this.orderService = orderService;
         this.assistanceRequestService = assistanceRequestService;
+        this.reviewService = reviewService;
     }
 
     @GetMapping("/menu/{qrToken}")
-    public QrMenuResponse getMenu(@PathVariable String qrToken) {
-        return menuService.getMenuByQr(qrToken);
+    public QrMenuResponse getMenu(@PathVariable String qrToken,
+                                  @org.springframework.web.bind.annotation.RequestParam(defaultValue = "en") String lang) {
+        return menuService.getMenuByQr(qrToken, lang);
+    }
+
+    @GetMapping("/recommendations/{qrToken}")
+    public List<com.restaurant.ordering.dto.MenuItemResponse> getRecommendations(
+            @PathVariable String qrToken,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "en") String lang) {
+        return menuService.getRecommendationsByQr(qrToken, lang);
     }
 
     @PostMapping("/orders")
@@ -65,5 +79,15 @@ public class PublicMenuController {
     @PostMapping("/service-requests")
     public AssistanceRequestResponse createServiceRequest(@Valid @RequestBody AssistanceRequestCreateRequest request) {
         return assistanceRequestService.createRequest(request);
+    }
+
+    @PostMapping("/reviews")
+    public ReviewResponse createReview(@Valid @RequestBody ReviewRequest request) {
+        return reviewService.createReview(request);
+    }
+
+    @GetMapping("/reviews/{qrToken}")
+    public List<ReviewResponse> getReviews(@PathVariable String qrToken) {
+        return reviewService.getReviewsByQr(qrToken);
     }
 }

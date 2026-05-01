@@ -9,6 +9,7 @@ import com.restaurant.ordering.entity.Coupon;
 import com.restaurant.ordering.entity.DiningTable;
 import com.restaurant.ordering.entity.MenuItemAddon;
 import com.restaurant.ordering.entity.MenuItem;
+import com.restaurant.ordering.entity.MenuItemTranslation;
 import com.restaurant.ordering.entity.MenuItemVariant;
 import com.restaurant.ordering.entity.Restaurant;
 import com.restaurant.ordering.enums.Role;
@@ -60,7 +61,11 @@ public class DataInitializer {
 
             menuItemRepository.saveAll(List.of(
                     withOptions(
-                            createItem("Paneer Tikka Bowl", "Charred paneer, saffron rice, mint chutney", new BigDecimal("249"), true, true, 25, 14, veg, "https://images.unsplash.com/photo-1546833999-b9f581a1996d"),
+                            withTranslations(
+                                    createItem("Paneer Tikka Bowl", "Charred paneer, saffron rice, mint chutney", new BigDecimal("249"), true, true, 25, 14, veg, "https://images.unsplash.com/photo-1546833999-b9f581a1996d"),
+                                    createTranslation("hi", "Paneer Tikka Bowl", "Charred paneer, kesar rice, mint chutney"),
+                                    createTranslation("es", "Bowl de Paneer Tikka", "Paneer a la brasa, arroz con azafran y chutney de menta")
+                            ),
                             List.of(
                                     createVariant("Regular", new BigDecimal("0"), 18, true, 14),
                                     createVariant("Large", new BigDecimal("70"), 10, true, 16)
@@ -71,7 +76,11 @@ public class DataInitializer {
                             )
                     ),
                     withOptions(
-                            createItem("Truffle Malai Kofta", "Silky gravy with herb naan pairing", new BigDecimal("299"), true, true, 20, 18, veg, "https://images.unsplash.com/photo-1601050690597-df0568f70950"),
+                            withTranslations(
+                                    createItem("Truffle Malai Kofta", "Silky gravy with herb naan pairing", new BigDecimal("299"), true, true, 20, 18, veg, "https://images.unsplash.com/photo-1601050690597-df0568f70950"),
+                                    createTranslation("hi", "Truffle Malai Kofta", "Creamy gravy aur herb naan ke saath"),
+                                    createTranslation("es", "Kofta Malai con Trufa", "Salsa suave con naan de hierbas")
+                            ),
                             List.of(
                                     createVariant("Classic", new BigDecimal("0"), 12, true, 18),
                                     createVariant("Chef Feast", new BigDecimal("90"), 8, true, 21)
@@ -82,7 +91,11 @@ public class DataInitializer {
                             )
                     ),
                     withOptions(
-                            createItem("Chicken Ghee Roast", "Spiced coastal roast with onion salad", new BigDecimal("329"), true, false, 18, 16, nonVeg, "https://images.unsplash.com/photo-1604908176997-431e7d7d8f17"),
+                            withTranslations(
+                                    createItem("Chicken Ghee Roast", "Spiced coastal roast with onion salad", new BigDecimal("329"), true, false, 18, 16, nonVeg, "https://images.unsplash.com/photo-1604908176997-431e7d7d8f17"),
+                                    createTranslation("hi", "Chicken Ghee Roast", "Masaledar coastal roast, onion salad ke saath"),
+                                    createTranslation("es", "Pollo Asado con Ghee", "Asado costero especiado con ensalada de cebolla")
+                            ),
                             List.of(
                                     createVariant("Half", new BigDecimal("0"), 10, true, 16),
                                     createVariant("Full", new BigDecimal("120"), 6, true, 20)
@@ -93,7 +106,11 @@ public class DataInitializer {
                             )
                     ),
                     withOptions(
-                            createItem("Smoked Butter Chicken", "Slow simmered tomato sauce and makhani foam", new BigDecimal("349"), true, false, 15, 20, nonVeg, "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398"),
+                            withTranslations(
+                                    createItem("Smoked Butter Chicken", "Slow simmered tomato sauce and makhani foam", new BigDecimal("349"), true, false, 15, 20, nonVeg, "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398"),
+                                    createTranslation("hi", "Smoked Butter Chicken", "Dheemi aanch par tomato makhani sauce"),
+                                    createTranslation("es", "Pollo Mantequilla Ahumado", "Salsa de tomate cocida lento con espuma makhani")
+                            ),
                             List.of(
                                     createVariant("Classic", new BigDecimal("0"), 9, true, 20),
                                     createVariant("Family Bowl", new BigDecimal("160"), 4, true, 24)
@@ -104,7 +121,11 @@ public class DataInitializer {
                             )
                     ),
                     withOptions(
-                            createItem("Masala Soda", "Citrus soda with black salt", new BigDecimal("89"), true, true, 40, 4, drinks, "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd"),
+                            withTranslations(
+                                    createItem("Masala Soda", "Citrus soda with black salt", new BigDecimal("89"), true, true, 40, 4, drinks, "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd"),
+                                    createTranslation("hi", "Masala Soda", "Citrus soda aur kala namak"),
+                                    createTranslation("es", "Soda Masala", "Soda citrica con sal negra")
+                            ),
                             List.of(
                                     createVariant("Regular", new BigDecimal("0"), 25, true, 4),
                                     createVariant("Pitcher", new BigDecimal("120"), 8, true, 6)
@@ -114,7 +135,11 @@ public class DataInitializer {
                             )
                     ),
                     withOptions(
-                            createItem("Cold Brew Tonic", "Coffee tonic with orange zest", new BigDecimal("129"), true, true, 30, 5, drinks, "https://images.unsplash.com/photo-1461023058943-07fcbe16d735"),
+                            withTranslations(
+                                    createItem("Cold Brew Tonic", "Coffee tonic with orange zest", new BigDecimal("129"), true, true, 30, 5, drinks, "https://images.unsplash.com/photo-1461023058943-07fcbe16d735"),
+                                    createTranslation("hi", "Cold Brew Tonic", "Coffee tonic orange zest ke saath"),
+                                    createTranslation("es", "Tonico Cold Brew", "Tonico de cafe con ralladura de naranja")
+                            ),
                             List.of(
                                     createVariant("Regular", new BigDecimal("0"), 18, true, 5),
                                     createVariant("Large", new BigDecimal("35"), 10, true, 6)
@@ -182,6 +207,22 @@ public class DataInitializer {
             item.getAddons().add(addon);
         }
         return item;
+    }
+
+    private MenuItem withTranslations(MenuItem item, MenuItemTranslation... translations) {
+        for (MenuItemTranslation translation : translations) {
+            translation.setMenuItem(item);
+            item.getTranslations().add(translation);
+        }
+        return item;
+    }
+
+    private MenuItemTranslation createTranslation(String languageCode, String name, String description) {
+        MenuItemTranslation translation = new MenuItemTranslation();
+        translation.setLanguageCode(languageCode);
+        translation.setName(name);
+        translation.setDescription(description);
+        return translation;
     }
 
     private MenuItemVariant createVariant(String name,

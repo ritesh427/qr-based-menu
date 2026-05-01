@@ -92,6 +92,14 @@ export default function MenuItemCard({ item, onAdd, cartItems = [] }) {
             {item.vegetarian ? "Veg" : "Chef"}
           </span>
         </div>
+        <div className="flex flex-wrap gap-2 text-xs font-semibold text-sand-600">
+          <span className="rounded-full bg-white px-3 py-1">
+            {Number(item.averageRating || 0).toFixed(1)} rating
+          </span>
+          <span className="rounded-full bg-white px-3 py-1">
+            {item.orderCount || 0} ordered
+          </span>
+        </div>
 
         {item.variants?.length > 0 && (
           <label className="block text-sm text-sand-700">

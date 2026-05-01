@@ -59,4 +59,7 @@ public class MenuItem {
 
     @OneToMany(mappedBy = "menuItem", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<MenuItemAddon> addons = new ArrayList<>();
+
+    @OneToMany(mappedBy = "menuItem", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<MenuItemTranslation> translations = new ArrayList<>();
 }

@@ -17,6 +17,7 @@ import com.restaurant.ordering.dto.MenuCategoryResponse;
 import com.restaurant.ordering.dto.MenuItemAddonRequest;
 import com.restaurant.ordering.dto.MenuItemRequest;
 import com.restaurant.ordering.dto.MenuItemResponse;
+import com.restaurant.ordering.dto.MenuItemTranslationRequest;
 import com.restaurant.ordering.dto.MenuItemVariantRequest;
 import com.restaurant.ordering.dto.QrCodeResponse;
 import com.restaurant.ordering.dto.QrMenuResponse;
@@ -24,6 +25,7 @@ import com.restaurant.ordering.entity.Category;
 import com.restaurant.ordering.entity.DiningTable;
 import com.restaurant.ordering.entity.MenuItemAddon;
 import com.restaurant.ordering.entity.MenuItem;
+import com.restaurant.ordering.entity.MenuItemTranslation;
 import com.restaurant.ordering.entity.MenuItemVariant;
 import com.restaurant.ordering.exception.ResourceNotFoundException;
 import com.restaurant.ordering.mapper.EntityMapper;
@@ -59,15 +61,15 @@ public class MenuService {
         this.publicBaseUrl = publicBaseUrl;
     }
 
-    @Cacheable(value = "menuByQr", key = "#qrToken")
+    @Cacheable(value = "menuByQr", key = "#qrToken + ':' + #languageCode")
     @Transactional(readOnly = true)
-    public QrMenuResponse getMenuByQr(String qrToken) {
+    public QrMenuResponse getMenuByQr(String qrToken, String languageCode) {
         DiningTable table = diningTableRepository.findByQrCodeToken(qrToken)
                 .orElseThrow(() -> new ResourceNotFoundException("Table QR token not found"));
 
         Map<Long, List<MenuItemResponse>> groupedItems = menuItemRepository.findByCategoryRestaurantIdOrderByCategoryNameAscNameAsc(
                         table.getRestaurant().getId()).stream()
-                .map(entityMapper::toMenuItemResponse)
+                .map(item -> entityMapper.toMenuItemResponse(item, languageCode))
                 .collect(java.util.stream.Collectors.groupingBy(
                         MenuItemResponse::categoryId,
                         LinkedHashMap::new,
@@ -93,6 +95,19 @@ public class MenuService {
                 table.getQrCodeToken(),
                 categories
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<MenuItemResponse> getRecommendationsByQr(String qrToken, String languageCode) {
+        DiningTable table = diningTableRepository.findByQrCodeToken(qrToken)
+                .orElseThrow(() -> new ResourceNotFoundException("Table QR token not found"));
+        return menuItemRepository.findByCategoryRestaurantIdOrderByCategoryNameAscNameAsc(table.getRestaurant().getId())
+                .stream()
+                .filter(MenuItem::isAvailable)
+                .map(item -> entityMapper.toMenuItemResponse(item, languageCode))
+                .sorted((left, right) -> Double.compare(recommendationScore(right), recommendationScore(left)))
+                .limit(6)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -176,6 +191,22 @@ public class MenuService {
             addon.setEstimatedPreparationTime(addonRequest.estimatedPreparationTime());
             item.getAddons().add(addon);
         }
+        item.getTranslations().clear();
+        for (MenuItemTranslationRequest translationRequest : request.translations() == null ? List.<MenuItemTranslationRequest>of() : request.translations()) {
+            MenuItemTranslation translation = new MenuItemTranslation();
+            translation.setMenuItem(item);
+            translation.setLanguageCode(translationRequest.languageCode().trim().toLowerCase());
+            translation.setName(translationRequest.name());
+            translation.setDescription(translationRequest.description());
+            item.getTranslations().add(translation);
+        }
+    }
+
+    private double recommendationScore(MenuItemResponse item) {
+        return (item.averageRating() == null ? 0.0 : item.averageRating()) * 20.0
+                + (item.reviewCount() == null ? 0.0 : item.reviewCount()) * 3.0
+                + (item.orderCount() == null ? 0.0 : Math.min(item.orderCount(), 25L)) * 2.0
+                + (item.stockQuantity() == null ? 0.0 : Math.min(item.stockQuantity(), 20)) * 0.25;
     }
 
     private Category findCategory(Long restaurantId, Long categoryId) {

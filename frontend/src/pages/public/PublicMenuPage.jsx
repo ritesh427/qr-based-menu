@@ -2,24 +2,32 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import CategoryTabs from "../../components/CategoryTabs";
 import MenuItemCard from "../../components/MenuItemCard";
-import { createServiceRequest, fetchMenu } from "../../api/menuApi";
+import { createServiceRequest, fetchMenu, fetchRecommendations } from "../../api/menuApi";
 import { useCart } from "../../context/CartContext";
 import { getApiBaseUrl } from "../../utils/runtime";
+
+const languages = [
+  { code: "en", label: "English" },
+  { code: "hi", label: "Hindi" },
+  { code: "es", label: "Spanish" }
+];
 
 export default function PublicMenuPage() {
   const { qrToken } = useParams();
   const { addItem, items, itemCount } = useCart();
   const [menu, setMenu] = useState(null);
+  const [recommendations, setRecommendations] = useState([]);
   const [error, setError] = useState("");
   const [activeCategory, setActiveCategory] = useState(null);
   const [search, setSearch] = useState("");
   const [vegOnly, setVegOnly] = useState(false);
+  const [language, setLanguage] = useState("en");
   const [serviceMessage, setServiceMessage] = useState("");
   const [serviceLoading, setServiceLoading] = useState("");
 
   useEffect(() => {
     setError("");
-    fetchMenu(qrToken)
+    fetchMenu(qrToken, language)
       .then((data) => {
         setMenu(data);
         setActiveCategory(data.categories[0]?.id ?? null);
@@ -27,7 +35,8 @@ export default function PublicMenuPage() {
       .catch(() => {
         setError(`Unable to load the menu. Make sure the backend is running on ${getApiBaseUrl()}.`);
       });
-  }, [qrToken]);
+    fetchRecommendations(qrToken, language).then(setRecommendations).catch(() => setRecommendations([]));
+  }, [qrToken, language]);
 
   const filteredCategories = useMemo(() => {
     if (!menu) return [];
@@ -94,6 +103,17 @@ export default function PublicMenuPage() {
           >
             {vegOnly ? "Veg Only On" : "Veg Only"}
           </button>
+          <select
+            value={language}
+            onChange={(event) => setLanguage(event.target.value)}
+            className="rounded-2xl border border-sand-200 bg-white px-4 py-3 text-sm font-semibold text-sand-700"
+          >
+            {languages.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <Link
             to={`/cart/${qrToken}`}
             className="rounded-2xl bg-paprika-500 px-5 py-3 text-center text-sm font-semibold text-white shadow-glow"
@@ -132,6 +152,27 @@ export default function PublicMenuPage() {
           </button>
         </div>
       </section>
+
+      {recommendations.length > 0 && (
+        <section className="mt-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-paprika-500">Recommended</p>
+              <h2 className="font-display text-2xl text-sand-900">Popular at this restaurant</h2>
+            </div>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {recommendations.slice(0, 3).map((item) => (
+              <MenuItemCard
+                key={`recommendation-${item.id}`}
+                item={item}
+                onAdd={addItem}
+                cartItems={items}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="mt-6 space-y-6">
         <CategoryTabs

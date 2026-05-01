@@ -1,9 +1,11 @@
 import api from "./client";
 
-export const fetchMenu = async (qrToken) => {
-  const { data } = await api.get(`/api/public/menu/${qrToken}`);
+export const fetchMenu = async (qrToken, language = "en") => {
+  const { data } = await api.get(`/api/public/menu/${qrToken}?lang=${language}`);
   return data;
 };
+export const fetchRecommendations = async (qrToken, language = "en") =>
+  (await api.get(`/api/public/recommendations/${qrToken}?lang=${language}`)).data;
 
 export const placeOrder = async (payload) => {
   const { data } = await api.post("/api/public/orders", payload);
@@ -16,6 +18,8 @@ export const fetchOrderStatus = async (qrToken) => {
   return data;
 };
 export const fetchFinalBill = async (qrToken) => (await api.get(`/api/public/bill/${qrToken}`)).data;
+export const createReview = async (payload) => (await api.post("/api/public/reviews", payload)).data;
+export const fetchReviews = async (qrToken) => (await api.get(`/api/public/reviews/${qrToken}`)).data;
 export const createServiceRequest = async (payload) => {
   const { data } = await api.post("/api/public/service-requests", payload);
   return data;
@@ -63,3 +67,4 @@ export const updateServiceRequestStatus = async (id, status) =>
   (await api.patch(`/api/admin/ops/service-requests/${id}/status`, { status })).data;
 export const fetchKitchenOrders = async () => (await api.get("/api/admin/ops/kitchen")).data;
 export const fetchTableSessions = async () => (await api.get("/api/admin/ops/table-sessions")).data;
+export const fetchAdminReviews = async () => (await api.get("/api/admin/ops/reviews")).data;
