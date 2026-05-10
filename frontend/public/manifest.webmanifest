@@ -1,0 +1,18 @@
+{
+  "name": "Saffron Table Ordering",
+  "short_name": "Saffron QR",
+  "description": "QR menu ordering, staff operations, and restaurant analytics.",
+  "start_url": "/menu/saffron-table-t1",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8f1e7",
+  "theme_color": "#2b2118",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

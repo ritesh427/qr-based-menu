@@ -1,5 +1,8 @@
 package com.restaurant.ordering.enums;
 
 public enum Role {
-    ADMIN
+    ADMIN,
+    MANAGER,
+    KITCHEN,
+    CASHIER
 }

@@ -32,6 +32,7 @@ public class AuthService {
                 .map(user -> new AuthResponse(
                         jwtService.generateToken(user.getUsername(), user.getRestaurantId(), user.getRole().name()),
                         user.getUsername(),
+                        user.getRole().name(),
                         user.getRestaurantId()
                 ))
                 .orElseThrow(() -> new BadRequestException("Invalid credentials"));

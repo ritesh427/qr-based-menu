@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import {
+  createStaff,
   createCoupon,
   createTables,
   createCategory,
   createMenuItem,
   deleteMenuItem,
+  fetchAnalytics,
   fetchAdminCategories,
   fetchAdminFinalBill,
   fetchAdminMenuItems,
@@ -17,6 +19,7 @@ import {
   fetchOrders,
   fetchQrCodes,
   fetchServiceRequests,
+  fetchStaff,
   fetchTableSessions,
   toggleMenuItemAvailability,
   uploadMenuImage,
@@ -26,6 +29,7 @@ import {
   updateOrderStatus
 } from "../../api/menuApi";
 import OrderStatusBadge from "../../components/OrderStatusBadge";
+import { useAuth } from "../../context/AuthContext";
 import { getApiBaseUrl } from "../../utils/runtime";
 
 const defaultItem = {
@@ -65,11 +69,24 @@ const defaultTranslation = {
   description: ""
 };
 
+const formatMoney = (value) => `Rs. ${Number(value || 0).toFixed(2)}`;
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
 export default function AdminDashboardPage() {
+  const { role } = useAuth();
   const [categories, setCategories] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const [staff, setStaff] = useState([]);
   const [qrs, setQrs] = useState([]);
   const [kitchenOrders, setKitchenOrders] = useState([]);
   const [serviceRequests, setServiceRequests] = useState([]);
@@ -90,13 +107,27 @@ export default function AdminDashboardPage() {
   const [itemImageFile, setItemImageFile] = useState(null);
   const [itemImagePreview, setItemImagePreview] = useState("");
   const [tableForm, setTableForm] = useState({ startTableNumber: "", count: 1 });
+  const [staffForm, setStaffForm] = useState({ username: "", password: "", role: "MANAGER" });
   const [stockDrafts, setStockDrafts] = useState({});
   const [selectedBillToken, setSelectedBillToken] = useState("");
   const [billPreview, setBillPreview] = useState(null);
   const [activeWorkspace, setActiveWorkspace] = useState("operations");
 
   const load = async () => {
-    const [categoryData, menuData, orderData, statsData, qrData, kitchenData, requestData, sessionData, couponData, reviewData] = await Promise.all([
+    const [
+      categoryData,
+      menuData,
+      orderData,
+      statsData,
+      qrData,
+      kitchenData,
+      requestData,
+      sessionData,
+      couponData,
+      reviewData,
+      analyticsData,
+      staffData
+    ] = await Promise.all([
       fetchAdminCategories(),
       fetchAdminMenuItems(),
       fetchOrders(),
@@ -106,7 +137,9 @@ export default function AdminDashboardPage() {
       fetchServiceRequests(),
       fetchTableSessions(),
       fetchCoupons(),
-      fetchAdminReviews()
+      fetchAdminReviews(),
+      fetchAnalytics(),
+      role === "ADMIN" ? fetchStaff() : Promise.resolve([])
     ]);
     setCategories(categoryData);
     setMenuItems(menuData);
@@ -118,6 +151,8 @@ export default function AdminDashboardPage() {
     setTableSessions(sessionData);
     setCoupons(couponData);
     setReviews(reviewData);
+    setAnalytics(analyticsData);
+    setStaff(staffData);
     setStockDrafts(Object.fromEntries(menuData.map((item) => [item.id, item.stockQuantity ?? 0])));
     if (!itemForm.categoryId && categoryData[0]) {
       setItemForm((current) => ({ ...current, categoryId: categoryData[0].id }));
@@ -126,7 +161,7 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [role]);
 
   useEffect(() => {
     const restaurantId = localStorage.getItem("restaurantId");
@@ -209,9 +244,10 @@ export default function AdminDashboardPage() {
       { id: "menu", label: "Menu Setup", detail: `${menuItems.length} items` },
       { id: "tables", label: "Tables & Bills", detail: `${qrs.length} tables` },
       { id: "coupons", label: "Coupons", detail: `${coupons.length} active` },
-      { id: "growth", label: "Growth", detail: `${reviews.length} reviews` }
+      { id: "growth", label: "Growth", detail: `${reviews.length} reviews` },
+      { id: "platform", label: "Platform", detail: `${staff.length} staff` }
     ],
-    [orders.length, menuItems.length, qrs.length, coupons.length, reviews.length]
+    [orders.length, menuItems.length, qrs.length, coupons.length, reviews.length, staff.length]
   );
 
   const handleCategorySubmit = async (event) => {
@@ -288,6 +324,96 @@ export default function AdminDashboardPage() {
     });
     setTableForm({ startTableNumber: "", count: 1 });
     load();
+  };
+
+  const handleStaffSubmit = async (event) => {
+    event.preventDefault();
+    await createStaff(staffForm);
+    setStaffForm({ username: "", password: "", role: "MANAGER" });
+    load();
+  };
+
+  const printKitchenTickets = () => {
+    const printWindow = window.open("", "_blank", "width=900,height=700");
+    if (!printWindow) {
+      return;
+    }
+
+    const tickets = kitchenOrders
+      .map(
+        (order) => `
+          <article class="ticket">
+            <div class="ticket-head">
+              <strong>Table ${escapeHtml(order.tableNumber)}</strong>
+              <span>Order #${escapeHtml(order.id)}</span>
+            </div>
+            <p>Status: ${escapeHtml(order.status)} | ETA: ${escapeHtml(order.estimatedReadyInMinutes || 10)} min</p>
+            <ul>
+              ${order.items
+                .map(
+                  (item) => `
+                    <li>
+                      <strong>${escapeHtml(item.itemName)}</strong>
+                      ${item.variantName ? ` (${escapeHtml(item.variantName)})` : ""}
+                      ${item.addonNames ? ` + ${escapeHtml(item.addonNames)}` : ""}
+                      x ${escapeHtml(item.quantity)}
+                    </li>`
+                )
+                .join("")}
+            </ul>
+          </article>`
+      )
+      .join("");
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Kitchen Tickets</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #2b2118; margin: 24px; }
+            h1 { margin-bottom: 16px; }
+            .ticket { border: 2px dashed #2b2118; border-radius: 16px; margin-bottom: 16px; padding: 16px; page-break-inside: avoid; }
+            .ticket-head { display: flex; justify-content: space-between; font-size: 20px; }
+            ul { margin: 12px 0 0; padding-left: 20px; }
+            li { margin-bottom: 8px; font-size: 16px; }
+          </style>
+        </head>
+        <body>
+          <h1>Kitchen Tickets</h1>
+          ${tickets || "<p>No active kitchen tickets.</p>"}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 250);
+  };
+
+  const exportOrdersCsv = () => {
+    const rows = [
+      ["Order Id", "Table", "Status", "Payment Status", "Payment Method", "Total", "Created At", "Items"],
+      ...orders.map((order) => [
+        order.id,
+        order.tableNumber,
+        order.status,
+        order.paymentStatus,
+        order.paymentMethod,
+        order.totalAmount,
+        order.createdAt,
+        order.items
+          .map((item) => `${item.itemName}${item.variantName ? ` (${item.variantName})` : ""} x ${item.quantity}`)
+          .join("; ")
+      ])
+    ];
+    const csv = rows
+      .map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleStockSave = async (item) => {
@@ -417,7 +543,7 @@ export default function AdminDashboardPage() {
         </section>
 
         <section className="glass-card p-2">
-          <div className="grid gap-2 md:grid-cols-5">
+          <div className="grid gap-2 md:grid-cols-6">
             {workspaceTabs.map((tab) => (
               <button
                 key={tab.id}
@@ -834,6 +960,150 @@ export default function AdminDashboardPage() {
                   </article>
                 ))}
                 {reviews.length === 0 && <p className="text-sm text-sand-500">No customer reviews yet.</p>}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className={activeWorkspace === "platform" ? "space-y-6" : "hidden"}>
+          <div className="glass-card p-6">
+            <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.35em] text-paprika-500">Phase 5</p>
+                <h2 className="font-display text-2xl text-sand-900">Platform Control Room</h2>
+              </div>
+              <p className="text-sm text-sand-600">Analytics, staff roles, exports, and print-ready kitchen operations.</p>
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+              {[
+                ["Revenue", formatMoney(analytics?.revenue)],
+                ["Paid", formatMoney(analytics?.paidRevenue)],
+                ["Pending", formatMoney(analytics?.pendingRevenue)],
+                ["Orders", analytics?.totalOrders || 0],
+                ["Active", analytics?.activeOrders || 0],
+                ["Avg Ticket", formatMoney(analytics?.averageTicket)]
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-3xl bg-white p-4">
+                  <p className="text-xs uppercase tracking-[0.25em] text-sand-500">{label}</p>
+                  <p className="mt-2 font-display text-2xl text-sand-900">{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="glass-card p-6">
+              <h3 className="font-display text-2xl text-sand-900">Top Sellers</h3>
+              <div className="mt-4 space-y-3">
+                {(analytics?.topItems || []).map((item) => (
+                  <div key={item.menuItemId} className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 text-sm">
+                    <div>
+                      <p className="font-semibold text-sand-900">{item.itemName}</p>
+                      <p className="text-sand-500">{item.quantitySold} sold</p>
+                    </div>
+                    <p className="font-semibold text-emerald-700">{formatMoney(item.revenue)}</p>
+                  </div>
+                ))}
+                {(analytics?.topItems || []).length === 0 && (
+                  <p className="text-sm text-sand-500">No sales data yet. Place a few orders and this board will wake up.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="glass-card p-6">
+              <h3 className="font-display text-2xl text-sand-900">Hourly Orders</h3>
+              <div className="mt-4 space-y-3">
+                {(analytics?.hourlyOrders || []).map((hour) => (
+                  <div key={hour.hour} className="rounded-2xl bg-white p-4 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-sand-900">{hour.hour}</span>
+                      <span className="text-sand-600">{hour.orderCount} order(s)</span>
+                    </div>
+                    <p className="mt-1 text-emerald-700">{formatMoney(hour.revenue)}</p>
+                  </div>
+                ))}
+                {(analytics?.hourlyOrders || []).length === 0 && (
+                  <p className="text-sm text-sand-500">Hourly performance appears after orders are created.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="glass-card p-6">
+              <h3 className="font-display text-2xl text-sand-900">Staff Accounts</h3>
+              {role === "ADMIN" ? (
+                <form className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_150px_auto]" onSubmit={handleStaffSubmit}>
+                  <input
+                    value={staffForm.username}
+                    onChange={(event) => setStaffForm((current) => ({ ...current, username: event.target.value }))}
+                    placeholder="Username"
+                    required
+                    className="rounded-2xl border border-sand-200 px-4 py-3"
+                  />
+                  <input
+                    type="password"
+                    value={staffForm.password}
+                    onChange={(event) => setStaffForm((current) => ({ ...current, password: event.target.value }))}
+                    placeholder="Password"
+                    required
+                    minLength={6}
+                    className="rounded-2xl border border-sand-200 px-4 py-3"
+                  />
+                  <select
+                    value={staffForm.role}
+                    onChange={(event) => setStaffForm((current) => ({ ...current, role: event.target.value }))}
+                    className="rounded-2xl border border-sand-200 px-4 py-3"
+                  >
+                    {["MANAGER", "KITCHEN", "CASHIER", "ADMIN"].map((staffRole) => (
+                      <option key={staffRole} value={staffRole}>
+                        {staffRole}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="submit" className="rounded-2xl bg-paprika-500 px-5 py-3 font-semibold text-white">
+                    Add Staff
+                  </button>
+                </form>
+              ) : (
+                <p className="mt-4 rounded-2xl bg-white p-4 text-sm text-sand-600">
+                  Staff creation is limited to ADMIN users. Your current role can still use operations and analytics.
+                </p>
+              )}
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {staff.map((member) => (
+                  <div key={member.id} className="rounded-2xl bg-white p-4">
+                    <p className="font-semibold text-sand-900">{member.username}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.25em] text-paprika-500">{member.role}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="glass-card p-6">
+              <h3 className="font-display text-2xl text-sand-900">POS & Print Tools</h3>
+              <p className="mt-2 text-sm text-sand-600">
+                Export order history for billing records or print active kitchen tickets during service rush.
+              </p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={exportOrdersCsv}
+                  className="rounded-2xl bg-sand-900 px-5 py-4 text-sm font-semibold text-white"
+                >
+                  Export Orders CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={printKitchenTickets}
+                  className="rounded-2xl bg-white px-5 py-4 text-sm font-semibold text-sand-900"
+                >
+                  Print Kitchen Tickets
+                </button>
+              </div>
+              <div className="mt-5 rounded-3xl bg-white p-4 text-sm text-sand-700">
+                <p className="font-semibold text-sand-900">Role Guide</p>
+                <p className="mt-2">MANAGER runs service, KITCHEN tracks tickets, CASHIER handles payment status, ADMIN manages staff.</p>
               </div>
             </div>
           </div>

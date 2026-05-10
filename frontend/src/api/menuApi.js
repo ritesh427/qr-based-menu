@@ -68,3 +68,6 @@ export const updateServiceRequestStatus = async (id, status) =>
 export const fetchKitchenOrders = async () => (await api.get("/api/admin/ops/kitchen")).data;
 export const fetchTableSessions = async () => (await api.get("/api/admin/ops/table-sessions")).data;
 export const fetchAdminReviews = async () => (await api.get("/api/admin/ops/reviews")).data;
+export const fetchAnalytics = async () => (await api.get("/api/admin/analytics/summary")).data;
+export const fetchStaff = async () => (await api.get("/api/admin/staff")).data;
+export const createStaff = async (payload) => (await api.post("/api/admin/staff", payload)).data;

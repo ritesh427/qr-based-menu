@@ -26,6 +26,9 @@ export default function AdminLoginPage() {
         <div>
           <p className="text-xs uppercase tracking-[0.4em] text-paprika-500">Secure Access</p>
           <h1 className="mt-2 font-display text-3xl text-sand-900">Admin Login</h1>
+          <p className="mt-2 text-sm text-sand-600">
+            Try admin/admin123, manager/manager123, kitchen/kitchen123, or cashier/cashier123.
+          </p>
         </div>
         <input
           value={form.username}

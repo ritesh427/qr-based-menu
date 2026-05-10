@@ -37,6 +37,9 @@ public class DataInitializer {
                                PasswordEncoder passwordEncoder) {
         return args -> {
             if (restaurantRepository.count() > 0) {
+                restaurantRepository.findAll().stream()
+                        .findFirst()
+                        .ifPresent(restaurant -> seedDefaultUsers(userRepository, passwordEncoder, restaurant.getId()));
                 return;
             }
 
@@ -156,13 +159,34 @@ public class DataInitializer {
                     createCoupon(restaurant, "CHEF50", "Flat Rs. 50 off on chef specials", new BigDecimal("50"), false, new BigDecimal("500"), BigDecimal.ZERO)
             ));
 
-            AppUser admin = new AppUser();
-            admin.setUsername("admin");
-            admin.setPassword(passwordEncoder.encode("admin123"));
-            admin.setRole(Role.ADMIN);
-            admin.setRestaurantId(restaurant.getId());
-            userRepository.save(admin);
+            seedDefaultUsers(userRepository, passwordEncoder, restaurant.getId());
         };
+    }
+
+    private void seedDefaultUsers(UserRepository userRepository,
+                                  PasswordEncoder passwordEncoder,
+                                  Long restaurantId) {
+        saveUserIfMissing(userRepository, passwordEncoder, restaurantId, "admin", "admin123", Role.ADMIN);
+        saveUserIfMissing(userRepository, passwordEncoder, restaurantId, "manager", "manager123", Role.MANAGER);
+        saveUserIfMissing(userRepository, passwordEncoder, restaurantId, "kitchen", "kitchen123", Role.KITCHEN);
+        saveUserIfMissing(userRepository, passwordEncoder, restaurantId, "cashier", "cashier123", Role.CASHIER);
+    }
+
+    private void saveUserIfMissing(UserRepository userRepository,
+                                   PasswordEncoder passwordEncoder,
+                                   Long restaurantId,
+                                   String username,
+                                   String password,
+                                   Role role) {
+        if (userRepository.existsByUsername(username)) {
+            return;
+        }
+        AppUser user = new AppUser();
+        user.setUsername(username);
+        user.setPassword(passwordEncoder.encode(password));
+        user.setRole(role);
+        user.setRestaurantId(restaurantId);
+        userRepository.save(user);
     }
 
     private Category createCategory(CategoryRepository repository, Restaurant restaurant, String name, String description) {
